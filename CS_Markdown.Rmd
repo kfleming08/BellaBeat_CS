@@ -1,0 +1,192 @@
+---
+title: "BellaBeats Case Study"
+author: "Kelsey Fleming"
+date: '2022-08-04'
+link-citations: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction and Business Question
+
+Welcome to my BellBeats case study as part of the Google Data Analytics Professional Certificate. I've been tasked with analyzing smart device usage data in order to gain insight on consumer behaviour which can be applied to the BellaBeats business strategy.
+
+## Ask Phase
+
+1. What are some trends in smart device usage?
+- What metrics are users tracking?
+2. How could these trends apply to Bellabeat customers?
+- Market a specific metric more heavily than others
+3. How could these trends help influence Bellabeat marketing strategy?
+- Allocate marketing funds to the metrics users care about
+- Allow stakeholders to invest in R&D based on how similar devices are used
+
+Business Task: **Analyze available data on similar products to discover trends in usage in order to develop an efficient marketing strategy**
+
+## Prepare Phase
+
+The dataset I am using is FitBit Fitness Tracker Data found on Kaggle. The data is open source and stored in 18 CSV files. Data can be found here: @https://www.kaggle.com/datasets/arashnic/fitbit
+
+## Process Phase 
+
+I am viewing and cleaning the data using R. First, I need to load the necessary packages
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(janitor)
+```
+
+
+Importing and renaming the data sets of interest
+
+```{r}
+dailyActivity <- read_csv("dailyActivity_merged.csv")
+dailyIntens <- read_csv("dailyIntensities_merged.csv")
+dailySleep <- read_csv("sleepDay_merged.csv")
+weightLog <- read_csv("weightLogInfo_merged.csv")
+```
+
+
+Previewing the data sets
+
+```{r}
+head(dailyActivity)
+```
+
+```{r}
+head(dailyIntens)
+```
+This set has the same data as dailyActivity so I will not use it
+
+```{r}
+head(dailySleep)
+```
+This set uses a datetime format, this does not match the other sets so we will need to deal with this in the cleaning phase
+
+```{r}
+head(weightLog)
+```
+Without knowing height, muscle mass, general health, not much to be gained from this data. Not to mention, there are only 8 distinct users logging data here:
+
+```{r}
+n_distinct(weightLog$Id)
+```
+
+
+###We will move forward with the dailyActivity and dailySleep datasets
+
+Let's look at some summary statistics for each table 
+
+```{r}
+dailyActivity %>%
+  select(VeryActiveMinutes, LightlyActiveMinutes, SedentaryMinutes, Calories) %>%
+  summary()
+
+dailySleep %>%
+  select(TotalMinutesAsleep, TotalTimeInBed) %>%
+  summary()
+```
+
+Can use this data to gain some insight into sleep quality as it is affected by activity level
+
+## Process Phase
+In this phase I will clean the data sets so they can be merged
+
+How many different users are in these data sets>
+```{r}
+n_distinct(dailyActivity$Id)
+n_distinct(dailySleep$Id)
+```
+The number of unique users is relatively low. Generally we want n > 30. We will continue with analysis but should keep this in mind when extracting insights. 
+
+Look for duplicates in the data and remove them 
+
+```{r}
+sum(duplicated(dailyActivity))
+sum(duplicated(dailySleep))
+dailySleep <- dailySleep %>%
+  distinct() %>%
+  drop_na()
+```
+
+And check again to make sure those were removed
+```{r}
+sum(duplicated(dailySleep))
+```
+
+Clean the column names to make merging easier
+```{r}
+clean_names(dailyActivity)
+dailyActivity <- rename_with(dailyActivity, tolower)
+
+clean_names(dailySleep)
+dailySleep <- rename_with(dailySleep, tolower)
+```
+
+Create a consistent date format
+
+```{r}
+dailyActivity <- dailyActivity %>% 
+  rename(date = activitydate) %>%
+  mutate(date = as_date(date, format = "%m/%d/%Y"))
+
+dailySleep <- dailySleep %>%
+  rename(date = sleepday) %>%
+  mutate(date = as_date(date, format = "%m/%d/%Y %I:%M:%S %p"))
+```
+
+Now we can merge the data frames
+```{r}
+DailyActivitySleep <- merge(dailyActivity, dailySleep, by = c("id", "date"))
+head(DailyActivitySleep)
+```
+
+
+## Analyze Phase
+
+Want to mutate the data frame to calculate the time it takes to fall asleep
+```{r}
+DailyActivitySleep <- DailyActivitySleep %>%
+  mutate(DailyActivitySleep, minfallasleep = totaltimeinbed - totalminutesasleep)
+```
+
+Seeing if sedentary minutes affects time to fall asleep
+
+```{r}
+ggplot( data = DailyActivitySleep, aes( x = sedentaryminutes, y = minfallasleep)) + geom_point()
+```
+We can see somewhat of a bell curve with some outliers
+
+See if very active minutes affects time to fall asleep
+```{r}
+ggplot( data = DailyActivitySleep, aes( x = veryactiveminutes, y = minfallasleep)) + geom_point()
+```
+We can see a relationship where the more active you are the quicker you will fall asleep
+
+Let's plot the other activity types
+
+```{r}
+ggplot( data = DailyActivitySleep, aes( x = fairlyactiveminutes, y = minfallasleep)) + geom_point()
+ggplot( data = DailyActivitySleep, aes( x = lightlyactiveminutes, y = minfallasleep)) + geom_point()
+```
+
+And finally let's look at the relationship between calories burned and time to fall asleep
+
+```{r}
+ggplot( data = DailyActivitySleep, aes( x = calories, y = minfallasleep)) + geom_point()
+```
+
+Exploring the Very Active vs Sleep relationship further, let's look at the total minutes asleep
+
+```{r}
+ggplot( data = DailyActivitySleep, aes( x = veryactiveminutes, y = totalminutesasleep)) + geom_point()
+```
+
+Not really seeing a relationship here
+
+## Share and Act Phase
+
+We were able to see a relationship between Very Active Minutes and the time it takes to fall asleep where the more active you are in the day (to a point) the more quickly you will fall asleep. Using this, BellaBeats could recommend activity levels in order to optimize a users sleep quality using their "Leaf" device along with the BellaBeats app. 
